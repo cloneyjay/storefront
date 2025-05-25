@@ -13,12 +13,23 @@ export default function HomePage() {
   const router = useRouter()
   const [loginOpen, setLoginOpen] = useState(false)
   const [signupOpen, setSignupOpen] = useState(false)
+  const [showVerificationSuccess, setShowVerificationSuccess] = useState(false)
 
   useEffect(() => {
     if (!loading && user) {
       router.push("/dashboard")
     }
   }, [user, loading, router])
+
+  useEffect(() => {
+    // Check if user was redirected after email verification
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get("verified") === "true") {
+      setShowVerificationSuccess(true)
+      // Clean up URL
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
 
   const handleAuthSuccess = () => {
     router.push("/dashboard")
@@ -49,6 +60,19 @@ export default function HomePage() {
           </div>
         </nav>
       </header>
+
+      {showVerificationSuccess && (
+        <div className="container mx-auto px-4 py-4">
+          <div className="bg-green-50 border border-green-200 rounded-md p-4 text-center">
+            <p className="text-green-800">
+              <strong>Email verified successfully!</strong> You can now sign in to your account.
+            </p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowVerificationSuccess(false)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-16 text-center">

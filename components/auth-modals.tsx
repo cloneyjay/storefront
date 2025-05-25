@@ -107,6 +107,7 @@ export function AuthModals({
           data: {
             full_name: signupFullName,
           },
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
         },
       })
 
