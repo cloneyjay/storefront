@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase-client"
+import { getConfirmationUrl } from "@/lib/url-utils"
 
 interface AuthModalsProps {
   loginOpen: boolean
@@ -100,6 +101,11 @@ export function AuthModals({
     setSignupLoading(true)
 
     try {
+      // Get the correct confirmation URL
+      const confirmationUrl = getConfirmationUrl()
+
+      console.log("Using confirmation URL:", confirmationUrl) // Debug log
+
       const { data, error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
@@ -107,7 +113,7 @@ export function AuthModals({
           data: {
             full_name: signupFullName,
           },
-          emailRedirectTo: `${window.location.origin}/auth/confirm`,
+          emailRedirectTo: confirmationUrl,
         },
       })
 
@@ -117,7 +123,7 @@ export function AuthModals({
         setSignupSuccess(true)
         toast({
           title: "Account created successfully!",
-          description: "Please check your email and click the verification link to activate your account.",
+          description: `Please check your email and click the verification link to activate your account. Confirmation will redirect to: ${confirmationUrl}`,
         })
 
         // Reset form
@@ -133,6 +139,40 @@ export function AuthModals({
       })
     } finally {
       setSignupLoading(false)
+    }
+  }
+
+  const resendVerification = async () => {
+    if (!loginEmail) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: loginEmail,
+        options: {
+          emailRedirectTo: getConfirmationUrl(),
+        },
+      })
+
+      if (error) throw error
+
+      toast({
+        title: "Verification email sent",
+        description: "Please check your email for the new verification link.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      })
     }
   }
 
@@ -211,6 +251,9 @@ export function AuthModals({
                 <strong>Email verification required:</strong> Please check your email inbox and click the verification
                 link to activate your account.
               </p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={resendVerification}>
+                Resend Verification Email
+              </Button>
             </div>
           )}
 
@@ -241,6 +284,9 @@ export function AuthModals({
                 <p className="text-sm text-green-800">
                   <strong>Account created successfully!</strong> We've sent a verification email to{" "}
                   <strong>{signupEmail}</strong>. Please click the link in the email to activate your account.
+                </p>
+                <p className="text-xs text-gray-600 mt-2">
+                  The verification link will redirect you to: {getConfirmationUrl()}
                 </p>
               </div>
               <div className="text-center">

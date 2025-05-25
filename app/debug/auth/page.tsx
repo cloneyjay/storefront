@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase-client"
 import { useToast } from "@/hooks/use-toast"
-import { CheckCircle, XCircle, AlertTriangle, Copy, RefreshCw } from "lucide-react"
+import { CheckCircle, XCircle, AlertTriangle, Copy, RefreshCw, ExternalLink } from "lucide-react"
+import { getBaseUrl, getConfirmationUrl, isValidDomain, getEnvironmentInfo } from "@/lib/url-utils"
 
 export default function AuthDebugPage() {
   const [config, setConfig] = useState<any>(null)
@@ -25,12 +26,15 @@ export default function AuthDebugPage() {
   }, [])
 
   const loadConfiguration = () => {
+    const envInfo = getEnvironmentInfo()
+    const baseUrl = getBaseUrl()
+    const confirmUrl = getConfirmationUrl()
+
     const supabaseConfig = {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      ...envInfo,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
       anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + "...",
-      currentUrl: window.location.origin,
-      expectedConfirmUrl: `${window.location.origin}/auth/confirm`,
-      userAgent: navigator.userAgent.substring(0, 50) + "...",
+      isValidDomain: isValidDomain(confirmUrl),
       timestamp: new Date().toISOString(),
     }
     setConfig(supabaseConfig)
@@ -70,19 +74,67 @@ export default function AuthDebugPage() {
     return result
   }
 
+  const testEnvironmentConfiguration = () => {
+    addTestResult("Environment Check", "warning", "Checking environment configuration...")
+
+    const envInfo = getEnvironmentInfo()
+
+    // Check NEXT_PUBLIC_SITE_URL
+    if (envInfo.hasNextPublicSiteUrl) {
+      addTestResult(
+        "NEXT_PUBLIC_SITE_URL",
+        "success",
+        `Environment variable set: ${envInfo.nextPublicSiteUrl}`,
+        envInfo,
+      )
+    } else {
+      addTestResult(
+        "NEXT_PUBLIC_SITE_URL",
+        "warning",
+        "Environment variable not set, falling back to other methods",
+        envInfo,
+      )
+    }
+
+    // Check base URL
+    if (envInfo.baseUrl.includes("localhost")) {
+      addTestResult("Base URL", "warning", `Using localhost: ${envInfo.baseUrl}. Email verification won't work.`)
+    } else if (envInfo.baseUrl.includes("vercel.app") || envInfo.baseUrl.includes("https://")) {
+      addTestResult("Base URL", "success", `Production URL detected: ${envInfo.baseUrl}`)
+    } else {
+      addTestResult("Base URL", "error", `Invalid base URL: ${envInfo.baseUrl}`)
+    }
+
+    // Check confirmation URL
+    if (isValidDomain(envInfo.confirmationUrl)) {
+      addTestResult("Confirmation URL", "success", `Valid confirmation URL: ${envInfo.confirmationUrl}`)
+    } else {
+      addTestResult("Confirmation URL", "error", `Invalid confirmation URL: ${envInfo.confirmationUrl}`)
+    }
+
+    // Check environment
+    if (envInfo.nodeEnv === "production") {
+      addTestResult("Environment", "success", "Running in production mode")
+    } else {
+      addTestResult("Environment", "warning", "Running in development mode")
+    }
+  }
+
   const testEmailVerification = async () => {
     setLoading(true)
-    addTestResult("Email Verification", "warning", "Starting email verification test...")
+    const confirmUrl = getConfirmationUrl()
+
+    addTestResult("Email Verification", "warning", `Starting test with confirmation URL: ${confirmUrl}`)
 
     try {
-      // First, check if user already exists
+      // Sign out first if needed
       const { data: existingUser } = await supabase.auth.getUser()
       if (existingUser.user?.email === testEmail) {
-        addTestResult("Pre-check", "warning", "User already signed in with test email, signing out first...")
+        addTestResult("Pre-check", "warning", "Signing out existing user...")
         await supabase.auth.signOut()
       }
 
-      // Test signup with verification
+      // Test signup with correct URL
       const { data, error } = await supabase.auth.signUp({
         email: testEmail,
         password: "testpassword123",
@@ -90,112 +142,63 @@ export default function AuthDebugPage() {
           data: {
             full_name: "Test User",
           },
-          emailRedirectTo: `${window.location.origin}/auth/confirm`,
+          emailRedirectTo: confirmUrl,
         },
       })
 
       if (error) {
-        addTestResult("Email Verification", "error", `Test failed: ${error.message}`, error)
-        toast({
-          title: "Test Failed",
-          description: error.message,
-          variant: "destructive",
+        addTestResult("Email Verification", "error", `Test failed: ${error.message}`, {
+          error,
+          confirmUrl,
         })
       } else {
-        addTestResult(
-          "Email Verification",
-          "success",
-          `Verification email sent to ${testEmail}. Check your email for the verification link.`,
-          {
-            userId: data.user?.id,
-            emailConfirmed: data.user?.email_confirmed_at,
-            confirmationSentAt: data.user?.confirmation_sent_at,
-          },
-        )
+        addTestResult("Email Verification", "success", `✅ Verification email sent to ${testEmail}`, {
+          userId: data.user?.id,
+          emailConfirmed: data.user?.email_confirmed_at,
+          confirmationSentAt: data.user?.confirmation_sent_at,
+          redirectUrl: confirmUrl,
+          expectedLinkFormat: `${confirmUrl}?token=TOKEN&type=email`,
+        })
 
         toast({
-          title: "Test Email Sent",
-          description: `Verification email sent to ${testEmail}. Check the email for the verification link.`,
+          title: "✅ Test Email Sent Successfully",
+          description: `Check ${testEmail} for verification link pointing to ${confirmUrl}`,
         })
       }
     } catch (error: any) {
       addTestResult("Email Verification", "error", `Unexpected error: ${error.message}`, error)
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
     }
   }
 
-  const testDirectVerification = async () => {
-    setLoading(true)
-    addTestResult("Direct Verification", "warning", "Testing direct token verification...")
+  const testSupabaseConfiguration = async () => {
+    addTestResult("Supabase Config", "warning", "Testing Supabase configuration...")
 
     try {
-      // This would normally be called from the confirmation URL
-      const urlParams = new URLSearchParams(window.location.search)
-      const token = urlParams.get("token")
-
-      if (!token) {
-        addTestResult(
-          "Direct Verification",
-          "warning",
-          "No token found in URL. This test requires a verification token.",
-        )
-        return
-      }
-
-      const { data, error } = await supabase.auth.verifyOtp({
-        token_hash: token,
-        type: "email",
-      })
+      // Test basic connection
+      const { data, error } = await supabase.auth.getSession()
 
       if (error) {
-        addTestResult("Direct Verification", "error", `Verification failed: ${error.message}`, error)
+        addTestResult("Supabase Connection", "error", `Connection failed: ${error.message}`)
       } else {
-        addTestResult("Direct Verification", "success", "Token verification successful!", data)
+        addTestResult("Supabase Connection", "success", "Successfully connected to Supabase")
       }
-    } catch (error: any) {
-      addTestResult("Direct Verification", "error", `Unexpected error: ${error.message}`, error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  const testAuthFlow = async () => {
-    setLoading(true)
-    addTestResult("Auth Flow", "warning", "Testing complete authentication flow...")
-
-    try {
-      // Test sign in
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: testEmail,
-        password: "testpassword123",
+      // Check if we can access the auth settings (this will fail but gives us info)
+      const baseUrl = getBaseUrl()
+      addTestResult("Supabase Settings Check", "warning", `Ensure your Supabase Site URL is set to: ${baseUrl}`, {
+        expectedSiteUrl: baseUrl,
+        expectedRedirectUrl: getConfirmationUrl(),
+        instructions: [
+          "1. Go to Supabase Dashboard → Authentication → URL Configuration",
+          `2. Set Site URL to: ${baseUrl}`,
+          `3. Add Redirect URL: ${getConfirmationUrl()}`,
+          "4. Save the configuration",
+        ],
       })
-
-      if (error) {
-        if (error.message.includes("Email not confirmed")) {
-          addTestResult("Auth Flow", "warning", "Email not confirmed - this is expected for unverified accounts", error)
-        } else {
-          addTestResult("Auth Flow", "error", `Sign in failed: ${error.message}`, error)
-        }
-      } else {
-        addTestResult("Auth Flow", "success", "Sign in successful!", {
-          userId: data.user?.id,
-          email: data.user?.email,
-          emailConfirmed: data.user?.email_confirmed_at,
-        })
-
-        // Update current session
-        await checkCurrentSession()
-      }
     } catch (error: any) {
-      addTestResult("Auth Flow", "error", `Unexpected error: ${error.message}`, error)
-    } finally {
-      setLoading(false)
+      addTestResult("Supabase Config", "error", `Configuration test failed: ${error.message}`)
     }
   }
 
@@ -241,18 +244,18 @@ export default function AuthDebugPage() {
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Authentication Debug & Testing</h1>
+          <h1 className="text-2xl font-bold">Email Verification Debug & Testing</h1>
           <Button variant="outline" onClick={() => window.location.reload()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
         </div>
 
-        {/* Configuration Status */}
+        {/* Environment Configuration Status */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              Supabase Configuration
+              Environment Configuration
               <Button variant="outline" size="sm" onClick={() => copyToClipboard(JSON.stringify(config, null, 2))}>
                 <Copy className="h-4 w-4 mr-2" />
                 Copy
@@ -262,20 +265,52 @@ export default function AuthDebugPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label className="text-sm font-medium">Supabase URL</Label>
-                <p className="text-sm text-gray-600 break-all">{config?.url || "Not configured"}</p>
+                <Label className="text-sm font-medium">NEXT_PUBLIC_SITE_URL</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-600 break-all">{config?.nextPublicSiteUrl || "Not set"}</p>
+                  <Badge variant={config?.hasNextPublicSiteUrl ? "default" : "destructive"}>
+                    {config?.hasNextPublicSiteUrl ? "Set" : "Missing"}
+                  </Badge>
+                </div>
               </div>
               <div>
-                <Label className="text-sm font-medium">Anonymous Key</Label>
-                <p className="text-sm text-gray-600">{config?.anonKey || "Not configured"}</p>
+                <Label className="text-sm font-medium">VERCEL_URL</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-600 break-all">{config?.vercelUrl || "Not available"}</p>
+                  <Badge variant={config?.hasVercelUrl ? "default" : "secondary"}>
+                    {config?.hasVercelUrl ? "Available" : "N/A"}
+                  </Badge>
+                </div>
               </div>
               <div>
-                <Label className="text-sm font-medium">Current Origin</Label>
-                <p className="text-sm text-gray-600">{config?.currentUrl}</p>
+                <Label className="text-sm font-medium">Resolved Base URL</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-600 break-all">{config?.baseUrl}</p>
+                  {config?.baseUrl?.includes("localhost") ? (
+                    <Badge variant="destructive">Local</Badge>
+                  ) : (
+                    <Badge variant="default">Production</Badge>
+                  )}
+                </div>
               </div>
               <div>
-                <Label className="text-sm font-medium">Expected Confirm URL</Label>
-                <p className="text-sm text-gray-600 break-all">{config?.expectedConfirmUrl}</p>
+                <Label className="text-sm font-medium">Confirmation URL</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-600 break-all">{config?.confirmationUrl}</p>
+                  <Button variant="ghost" size="sm" onClick={() => window.open(config?.confirmationUrl, "_blank")}>
+                    <ExternalLink className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Environment</Label>
+                <p className="text-sm text-gray-600">{config?.nodeEnv}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Domain Valid</Label>
+                <Badge variant={config?.isValidDomain ? "default" : "destructive"}>
+                  {config?.isValidDomain ? "Valid" : "Invalid"}
+                </Badge>
               </div>
             </div>
           </CardContent>
@@ -303,11 +338,6 @@ export default function AuthDebugPage() {
                   <p>Email Confirmed: {currentSession.user.email_confirmed_at ? "Yes" : "No"}</p>
                 </div>
               )}
-              {currentSession?.error && (
-                <Alert>
-                  <AlertDescription>{currentSession.error}</AlertDescription>
-                </Alert>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -315,7 +345,7 @@ export default function AuthDebugPage() {
         {/* Test Controls */}
         <Card>
           <CardHeader>
-            <CardTitle>Email Verification Tests</CardTitle>
+            <CardTitle>Comprehensive Email Verification Tests</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -330,16 +360,16 @@ export default function AuthDebugPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Button onClick={testEnvironmentConfiguration} variant="outline">
+                1. Test Environment
+              </Button>
+
+              <Button onClick={testSupabaseConfiguration} variant="outline">
+                2. Test Supabase Config
+              </Button>
+
               <Button onClick={testEmailVerification} disabled={loading}>
-                {loading ? "Testing..." : "1. Send Verification Email"}
-              </Button>
-
-              <Button onClick={testDirectVerification} disabled={loading} variant="outline">
-                2. Test Token Verification
-              </Button>
-
-              <Button onClick={testAuthFlow} disabled={loading} variant="outline">
-                3. Test Sign In Flow
+                {loading ? "Testing..." : "3. Send Verification Email"}
               </Button>
 
               <Button onClick={clearResults} variant="ghost">
@@ -348,14 +378,16 @@ export default function AuthDebugPage() {
             </div>
 
             <Alert>
-              <AlertTriangle className="h-4 w-4" />
+              <CheckCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Testing Steps:</strong>
+                <strong>Complete Testing Checklist:</strong>
                 <ol className="list-decimal list-inside mt-2 space-y-1">
-                  <li>Click "Send Verification Email" to test email delivery</li>
-                  <li>Check your email inbox for the verification link</li>
-                  <li>Click the verification link (should redirect to /auth/confirm)</li>
-                  <li>Return here and click "Test Sign In Flow" to verify the account works</li>
+                  <li>✅ Environment variables configured correctly</li>
+                  <li>🔧 Supabase dashboard URLs updated to match your domain</li>
+                  <li>📧 Send test verification email</li>
+                  <li>📱 Check email - link should point to your deployed domain</li>
+                  <li>🔗 Click verification link to test complete flow</li>
+                  <li>✅ Verify you can sign in after email confirmation</li>
                 </ol>
               </AlertDescription>
             </Alert>
@@ -399,40 +431,57 @@ export default function AuthDebugPage() {
           </Card>
         )}
 
-        {/* Troubleshooting Guide */}
+        {/* Next Steps */}
         <Card>
           <CardHeader>
-            <CardTitle>Troubleshooting Guide</CardTitle>
+            <CardTitle>🚀 Next Steps for Email Verification Fix</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4 text-sm">
-              <div>
-                <h4 className="font-medium text-red-600">❌ Common Issues:</h4>
-                <ul className="list-disc list-inside mt-2 space-y-1 text-gray-600">
-                  <li>Email not received → Check spam folder, verify Supabase email settings</li>
-                  <li>Verification link broken → Check Site URL in Supabase dashboard</li>
-                  <li>"Email not confirmed" error → User needs to click verification link first</li>
-                  <li>404 on /auth/confirm → Route not properly configured</li>
-                </ul>
-              </div>
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Critical:</strong> You must update your Supabase dashboard configuration for email
+                  verification to work with your deployed domain.
+                </AlertDescription>
+              </Alert>
 
               <div>
-                <h4 className="font-medium text-green-600">✅ Expected Flow:</h4>
+                <h4 className="font-medium text-blue-600">🔧 Required Supabase Configuration:</h4>
                 <ol className="list-decimal list-inside mt-2 space-y-1 text-gray-600">
-                  <li>User signs up → Verification email sent</li>
-                  <li>User clicks email link → Redirected to /auth/confirm</li>
-                  <li>Token validated → Success message shown</li>
-                  <li>User can now sign in successfully</li>
+                  <li>Go to your Supabase project dashboard</li>
+                  <li>
+                    Navigate to <strong>Authentication → URL Configuration</strong>
+                  </li>
+                  <li>
+                    Set <strong>Site URL</strong> to:{" "}
+                    <code className="bg-gray-100 px-1 rounded">{config?.baseUrl}</code>
+                  </li>
+                  <li>
+                    Add <strong>Redirect URLs</strong>:{" "}
+                    <code className="bg-gray-100 px-1 rounded">{config?.confirmationUrl}</code>
+                  </li>
+                  <li>Save the configuration and wait a few minutes for it to take effect</li>
                 </ol>
               </div>
 
               <div>
-                <h4 className="font-medium text-blue-600">🔧 Configuration Checklist:</h4>
+                <h4 className="font-medium text-green-600">✅ After Configuration:</h4>
                 <ul className="list-disc list-inside mt-2 space-y-1 text-gray-600">
-                  <li>Supabase Site URL set to your domain</li>
-                  <li>Redirect URLs include /auth/confirm</li>
-                  <li>Email templates use correct confirmation URL</li>
-                  <li>Environment variables properly configured</li>
+                  <li>Run the tests above to verify everything is working</li>
+                  <li>Send a test verification email</li>
+                  <li>Check that the email link points to your deployed domain</li>
+                  <li>Complete the verification flow end-to-end</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-red-600">❌ Common Issues:</h4>
+                <ul className="list-disc list-inside mt-2 space-y-1 text-gray-600">
+                  <li>Email links still point to localhost → Supabase Site URL not updated</li>
+                  <li>404 error on verification → Redirect URL not configured</li>
+                  <li>Configuration not taking effect → Wait 5-10 minutes after saving</li>
+                  <li>Still getting localhost → Clear browser cache and test in incognito</li>
                 </ul>
               </div>
             </div>
