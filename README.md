@@ -513,9 +513,9 @@ Special thanks to all the small traders and business owners who inspired this pr
 
 ### Project Maintainers
 
-- **Email**: [your-email@example.com](mailto:jamesangatia445@gmail.com)
-- **GitHub**: [@your-username](https://github.com/cloneyjay)
-- **Twitter**: [@your-twitter](https://twitter.com/48__400)
+- **Email**: [James](mailto:jamesangatia445@gmail.com)
+- **GitHub**: [cloneyjay](https://github.com/cloneyjay)
+- **Twitter**: [@48__400](https://twitter.com/48__400)
 
 
 ### Community
