@@ -46,17 +46,19 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
-        <nav className="flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <BarChart3 className="h-8 w-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">Storefront Builder</span>
+      <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-sm border-b border-gray-200">
+        <nav className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+            <span className="font-bold text-lg sm:text-xl text-gray-900">Storefront</span>
           </div>
-          <div className="space-x-4">
-            <Button variant="outline" onClick={() => setLoginOpen(true)}>
+          <div className="flex gap-3 sm:gap-4">
+            <Button variant="ghost" className="h-9 sm:h-10" onClick={() => setLoginOpen(true)}>
               Sign In
             </Button>
-            <Button onClick={() => setSignupOpen(true)}>Get Started</Button>
+            <Button className="h-9 sm:h-10" onClick={() => setSignupOpen(true)}>
+              Start Free
+            </Button>
           </div>
         </nav>
       </header>
@@ -65,7 +67,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-4">
           <div className="bg-green-50 border border-green-200 rounded-md p-4 text-center">
             <p className="text-green-800">
-              <strong>Email verified successfully!</strong> You can now sign in to your account.
+              <strong>Email verified successfully!</strong> You can now sign in.
             </p>
             <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowVerificationSuccess(false)}>
               Dismiss
@@ -75,29 +77,35 @@ export default function HomePage() {
       )}
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-16 text-center">
-        <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
+      <section className="container mx-auto px-4 py-12 md:py-16 text-center">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 tracking-tight">
           Track Your Business
           <span className="text-blue-600"> Finances</span>
         </h1>
-        <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-          A lightweight PWA that helps small traders track income and expenses in real-time using voice and photo
-          inputs. Know your profit instantly.
+        <p className="text-lg sm:text-xl text-gray-600 mb-6 md:mb-8 max-w-2xl mx-auto">
+          A lightweight PWA to track income and expenses in real-time using voice and photo inputs.
         </p>
-        <div className="space-x-4">
-          <Button size="lg" className="text-lg px-8 py-3" onClick={() => setSignupOpen(true)}>
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
+          <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6" onClick={() => setSignupOpen(true)}>
             Start Free Trial
           </Button>
-          <Button variant="outline" size="lg" className="text-lg px-8 py-3" onClick={() => setLoginOpen(true)}>
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="w-full sm:w-auto text-base sm:text-lg px-6" 
+            onClick={() => setLoginOpen(true)}
+          >
             Sign In
           </Button>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="container mx-auto px-4 py-16">
-        <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Powerful Features for Small Traders</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <section className="container mx-auto px-4 py-12 md:py-16">
+        <h2 className="text-2xl sm:text-3xl font-bold text-center text-gray-900 mb-8 md:mb-12">
+          Powerful Features for Small Traders
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
           <Card>
             <CardHeader>
               <Mic className="h-12 w-12 text-blue-600 mb-4" />
